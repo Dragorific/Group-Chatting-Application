@@ -1,0 +1,2 @@
+# Group Chatting Application
+ A client/server network application that implements multi-group online chatting. The code will be written in Python 3 using the Berkeley/POSIX socket API. The server code operates as a directory manager for online “chat rooms” that can be queried by the clients (i.e., the chat room users). The clients can dynamically create, delete and join chat rooms. After joining a chat room, the client software exchanges messages with other clients using IP multicast communications.
