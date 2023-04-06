@@ -2,6 +2,8 @@ import socket
 import argparse
 import json
 import struct
+import sys
+import os
 import datetime
 import keyboard
 from random import randint
@@ -160,43 +162,48 @@ class Client:
 
     def handle_user_input(self):
         while True:
-            command = input(f'{time()}: Enter a command (getdir/makeroom/connect/deleteroom/bye): ').strip().lower()
-            if command == 'connect':
-                self.server_socket = self.connect_to_server()
-            elif command == 'name':
-                self.user_name = input('Enter your display name: ').strip()
-            elif command == 'getdir':
-                if self.server_socket:
-                    self.send_request_to_server('getdir')
-                    data = self.handle_server_response()
-                    print(f"{time()}: List of chatrooms: {data}")
-                else:
-                    print(f"{time()}: Please connect to the server first.")
-            elif command == 'makeroom':
-                if self.server_socket:
-                    chat_room = input(f'{time()}: Enter a chat room name: ').strip()
-                    self.send_request_to_server('makeroom', chat_room)
-                else:
-                    print(f"{time()}: Please connect to the server first.")
-            elif command == 'deleteroom':
-                if self.server_socket:
-                    chat_room = input('Enter a chat room name: ').strip()
-                    self.send_request_to_server('deleteroom', chat_room)
-                else:
-                    print("Please connect to the server first.")
-            elif command == 'chat':
-                if self.server_socket:
-                    chat_room = input('Enter a chat room name: ').strip()
-                    self.send_request_to_server('chat', chat_room)
-                    response = self.handle_server_response()
-                    if response["status"] == "success":
-                        self.join_chat_room(chat_room)
+            try:
+                command = input(f'{time()}: Enter a command (name/getdir/makeroom/connect/chat/deleteroom/bye): ').strip().lower()
+                if command == 'connect':
+                    self.server_socket = self.connect_to_server()
+                elif command == 'name':
+                    self.user_name = input('Enter your display name: ').strip()
+                elif command == 'getdir':
+                    if self.server_socket:
+                        self.send_request_to_server('getdir')
+                        data = self.handle_server_response()
+                        print(f"{time()}: List of chatrooms: {data}")
                     else:
-                        print(f"{time()}: Error joining chat room.")
-                else:
-                    print(f"{time()}: Please connect to the server first.")
-            elif command == 'bye':
+                        print(f"{time()}: Please connect to the server first.")
+                elif command == 'makeroom':
+                    if self.server_socket:
+                        chat_room = input(f'{time()}: Enter a chat room name: ').strip()
+                        self.send_request_to_server('makeroom', chat_room)
+                    else:
+                        print(f"{time()}: Please connect to the server first.")
+                elif command == 'deleteroom':
+                    if self.server_socket:
+                        chat_room = input('Enter a chat room name: ').strip()
+                        self.send_request_to_server('deleteroom', chat_room)
+                    else:
+                        print("Please connect to the server first.")
+                elif command == 'chat':
+                    if self.server_socket:
+                        chat_room = input('Enter a chat room name: ').strip()
+                        self.send_request_to_server('chat', chat_room)
+                        response = self.handle_server_response()
+                        if response["status"] == "success":
+                            self.join_chat_room(chat_room)
+                        else:
+                            print(f"{time()}: Error joining chat room.")
+                    else:
+                        print(f"{time()}: Please connect to the server first.")
+                elif command == 'bye':
+                    break
+            except EOFError:
+                print("Program Interrupted...")
                 break
+
 
     def handle_server_response(self):
         response = self.server_socket.recv(1024)
@@ -207,8 +214,9 @@ class Client:
         self.chat_room = chat_room
         multicast_ip = self.get_multicast_ip(chat_room)
         self.multicast_group = multicast_ip
-        print(f'Joined chat room: {self.chat_room}')
-
+        os.system('cls' if os.name == 'nt' else 'clear')
+        print(f"~~~~~~~~~~~~~~ WELCOME TO {self.chat_room} ~~~~~~~~~~~~~~")
+   
         self.multicast_socket = self.setup_multicast_socket(multicast_ip)
 
         receive_thread = Thread(target=self.receive_messages)
@@ -219,16 +227,18 @@ class Client:
 
         receive_thread.join()
         send_thread.join()
+    
 
     def send_messages(self):
         while self.chat_room:
-            try:
-                message = input()
-                data = f'{self.user_name}: {message}'.encode('utf-8')
-                self.multicast_socket.sendto(data, (self.multicast_group, self.multicast_port))
-            except EOFError:
-                self.leave_chat_room()
-                break
+            message = input()
+            if message == "\x1d":
+                print("Goodbye...")
+                self.leave_chat_room(self.multicast_group)
+                sys.exit(0)
+            data = f'{self.user_name}: {message}'.encode('utf-8')
+            self.multicast_socket.sendto(data, (self.multicast_group, self.multicast_port))
+
 
     def receive_messages(self):
         while self.chat_room:
@@ -238,11 +248,13 @@ class Client:
             except socket.error:
                 break
 
-    def leave_chat_room(self):
+    def leave_chat_room(self, multicast_group):
         if self.chat_room:
             self.multicast_socket.setsockopt(socket.IPPROTO_IP, socket.IP_DROP_MEMBERSHIP,
                                             struct.pack("4sl", socket.inet_aton(self.multicast_group), socket.INADDR_ANY))
             self.chat_room = None
+        self.multicast_socket.close()
+
 
 
 if __name__ == '__main__':
