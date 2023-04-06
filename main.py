@@ -52,13 +52,13 @@ class Server:
             while True:
                 data = client_socket.recv(1024)
                 if not data:
-                    print(f"{time()}: Client closed the connection.")
+                    print(f"{time()}: Client <{client_address}> closed the connection.")
                     break
 
                 request = json.loads(data.decode('utf-8'))
                 action = request.get('action')
                 chat_room = request.get('chat_room')
-
+            
                 if action == 'makeroom':
                     print(f"{time()}: Received 'makeroom' command.")
                     self.create_chat_room(chat_room)
@@ -113,8 +113,10 @@ class Server:
             multicast_ip = self.chat_room_multicast_ips[chat_room]
             response = json.dumps({"status": "success", "multicast_ip": multicast_ip}).encode("utf-8")
             client_socket.sendall(response)
-            print(f'{time()}: Client joined chat room "{chat_room}".')
+            print(f'{time()}: Client <{client_socket.getsockname()}> joined chat room "{chat_room}".')
         else:
+            response = json.dumps({"status": "fail", "multicast_ip": None}).encode("utf-8")
+            client_socket.sendall(response)
             print(f'{time()}: Chat room "{chat_room}" doesnt exist.')
 
     def send_chat_rooms_list(self, client_socket: socket.socket):
@@ -200,8 +202,10 @@ class Client:
                         print(f"{time()}: Please connect to the server first.")
                 elif command == 'bye':
                     break
+                else:
+                    print(f"{time()}: Unhandled command, please input one of (name/getdir/makeroom/connect/chat/deleteroom/bye)...")
             except EOFError:
-                print("Program Interrupted...")
+                print(f"{time()}: Program Interrupted...")
                 break
 
 
@@ -231,13 +235,17 @@ class Client:
 
     def send_messages(self):
         while self.chat_room:
-            message = input()
-            if message == "\x1d":
-                print("Goodbye...")
+            try:
+                message = input()
+                if message == "\x1d":
+                    print("Goodbye...")
+                    self.leave_chat_room(self.multicast_group)
+                    sys.exit(0)
+                data = f'{self.user_name}: {message}'.encode('utf-8')
+                self.multicast_socket.sendto(data, (self.multicast_group, self.multicast_port))
+            except EOFError:
                 self.leave_chat_room(self.multicast_group)
-                sys.exit(0)
-            data = f'{self.user_name}: {message}'.encode('utf-8')
-            self.multicast_socket.sendto(data, (self.multicast_group, self.multicast_port))
+                break
 
 
     def receive_messages(self):
